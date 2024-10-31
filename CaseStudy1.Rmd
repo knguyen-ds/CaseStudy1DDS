@@ -1,0 +1,90 @@
+---
+title: "CaseStudyProj1"
+author: "Katherine Nguyen"
+date: "2024-10-31"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Find video presentation here: https://youtu.be/6ePwAUfPo60 
+
+library(dplyr)
+library(e1071)
+library(caret)
+
+# Load the datasets
+data <- read.csv("/Users/katie/Documents/MSDS/Doing Data Science/Unit 8/CaseStudy1-data.csv")
+competition_data <- read.csv("/Users/katie/Documents/MSDS/Doing Data Science/Unit 8/CaseStudy1CompSet No Attrition.csv")
+head(data)
+head(competition_data)
+
+# Convert categorical variables to factors
+data$Attrition <- as.factor(ifelse(data$Attrition == "Yes", 1, 0))
+data$Department <- as.factor(data$Department)
+data$JobRole <- as.factor(data$JobRole)
+data$Gender <- as.factor(data$Gender)
+data$MaritalStatus <- as.factor(data$MaritalStatus)
+data$OverTime <- as.factor(data$OverTime)
+
+# Check for NA values and remove them
+data <- na.omit(data)
+
+# Select relevant features for modeling
+features <- data %>%
+  select(Age, DailyRate, DistanceFromHome, Education, EnvironmentSatisfaction,
+         HourlyRate, JobInvolvement, JobLevel, JobRole, JobSatisfaction,
+         MonthlyIncome, OverTime, PercentSalaryHike, PerformanceRating,
+         RelationshipSatisfaction, StandardHours, TotalWorkingYears,
+         TrainingTimesLastYear, WorkLifeBalance, YearsAtCompany,
+         YearsInCurrentRole, YearsSinceLastPromotion, YearsWithCurrManager,
+         Attrition)
+
+# Split the data into training and testing sets
+set.seed(123)  # For reproducibility
+trainIndex <- createDataPartition(features$Attrition, p = .8, list = FALSE, times = 1)
+train_data <- features[trainIndex, ]
+val_data <- features[-trainIndex, ]
+
+# Build the Naive Bayes model
+nb_model <- naiveBayes(Attrition ~ ., data = train_data, laplace = 1)
+
+# Predict on the test data using the threshold of 0.38
+validation_probs <- predict(nb_model, test_data, type = "raw")[, 2]
+val_predictions <- ifelse(test_probs > 0.38, 1, 0)
+confusion_matrix <- confusionMatrix(as.factor(val_predictions), val_data$Attrition, mode = "everything")
+summary(confusion_matrix)
+conf_matrix_table <- as.table(confusion_matrix$table)
+
+# Preprocess the competition data (same as training data)
+competition_data$Department <- as.factor(competition_data$Department)
+competition_data$JobRole <- as.factor(competition_data$JobRole)
+competition_data$Gender <- as.factor(competition_data$Gender)
+competition_data$MaritalStatus <- as.factor(competition_data$MaritalStatus)
+competition_data$OverTime <- as.factor(competition_data$OverTime)
+
+# Predict on the competition data using the best threshold
+comp_probs <- predict(nb_model, competition_data, type = "raw")[, 2]
+competition_predictions <- ifelse(comp_probs > 0.38, 1, 0)
+
+# Prepare the output with ID and Attrition Prediction
+competition_results <- data.frame(ID = competition_data$ID, Attrition = competition_predictions)
+competition_results$Attrition <- ifelse(competition_results$Attrition == 1, "Yes", "No")
+head(competition_results)
+
+# Export the results to a CSV file
+write.csv(competition_results, "/Users/katie/Documents/MSDS/Doing Data Science/Unit 8/Case1PredictionsNguyen Attrition.csv", row.names = FALSE)
+
+# Convert the confusion matrix to a data frame for plotting
+conf_matrix_df <- as.data.frame(conf_matrix_table)
+colnames(conf_matrix_df) <- c("Prediction", "Reference", "Frequency")
+
+# Plot the confusion matrix as a heatmap
+ggplot(conf_matrix_df, aes(x = Reference, y = Prediction, fill = Frequency)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = Frequency), vjust = 1) +
+  scale_fill_gradient(low = "white", high = "lightblue") +
+  labs(title = "Confusion Matrix", x = "Actual", y = "Predicted") +
+  theme_minimal()
+
